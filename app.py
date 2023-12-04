@@ -7,10 +7,16 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 CORS(app)
 
+# db_config = {
+#     'host': '10.30.10.13',
+#     'user': 'bestshop',
+#     'password': 'bestshop',
+#     'database': 'best_shop',
+# }
 db_config = {
-    'host': '10.30.10.13',
-    'user': 'bestshop',
-    'password': 'bestshop',
+    'host': '127.0.0.1',
+    'user': 'root',
+    'password': '31125',
     'database': 'best_shop',
 }
 
@@ -145,6 +151,74 @@ def get_field_details(categoryID, fieldID):
     finally:
         cursor.close()
         connection.close()
+
+@app.route('/stocks', methods=['GET', 'POST'])
+def manage_stocks():
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    if request.method == 'GET':
+        try:
+            cursor.execute('''
+                SELECT 
+                    s.stock_id,
+                    DATE_FORMAT(s.time_added, '%H:%i:%s') AS time_added,
+                    DATE_FORMAT(s.date_added, '%Y-%m-%d') AS date_added,
+                    s.name AS stock_name,
+                    s.quantity,
+                    s.price,
+                    c.category_name,
+                    GROUP_CONCAT(fd.details_name) AS field_details_name
+                FROM 
+                    stock_details s
+                INNER JOIN 
+                    mapping_table m ON s.stock_id = m.stock_id
+                INNER JOIN
+                    category c ON m.category_id = c.category_id
+                INNER JOIN
+                    field_details fd ON m.field_details_id = fd.detail_id
+                GROUP BY 
+                    s.stock_id, s.time_added, s.date_added, s.name, s.quantity, s.price, c.category_name
+            ''')
+            stocks = cursor.fetchall()
+            for stock in stocks:
+                stock['time_added'] = str(stock['time_added'])
+                stock['date_added'] = str(stock['date_added'])
+                stock['field_details_name'] = stock['field_details_name'].split(',')
+            return jsonify(stocks)
+
+        except mysql.connector.Error as e:
+            return jsonify({'error': str(e)}), 500
+        finally:
+            cursor.close()
+            connection.close()
+
+    elif request.method == 'POST':
+        try:
+            data = request.json
+            category_id = int(data['category_id'])
+            field_details_ids = data['field_details_id']
+            name = data['name']
+            quantity = int(data['quantity'])
+            price = int(data['price'])
+            cursor.execute(
+                'INSERT INTO stock_details (time_added, date_added, name, quantity, price) VALUES (CURRENT_TIME(), CURRENT_DATE(), %s, %s, %s)',
+                (name, quantity, price)
+            )
+            connection.commit()
+            stock_id = cursor.lastrowid
+            for field_details_id in field_details_ids:
+                cursor.execute(
+                    'INSERT INTO mapping_table (stock_id, category_id, field_details_id) VALUES (%s, %s, %s)',
+                    (stock_id, category_id, field_details_id)
+                )
+                connection.commit()
+            return jsonify({'message': 'Stock added successfully'})
+        
+        except mysql.connector.Error as e:
+            return jsonify({'error': str(e)}), 500
+        finally:
+            cursor.close()
+            connection.close()
 
 @app.route('/uploads/<path:filename>', methods=['GET'])
 def uploaded_file(filename):
