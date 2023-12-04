@@ -26,7 +26,7 @@
     formData.append('image', imageInput.files[0]);
     console.log('Form Data:', formData);
 
-    fetch('http://10.10.161.160:80/categories', {
+    fetch('http://10.10.162.193:5000/categories', {
         method: 'POST',
         body: formData,
     })

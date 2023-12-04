@@ -14,6 +14,9 @@ db_config = {
     'database': 'best_shop',
 }
 
+UPLOAD_FOLDER = 'uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
 def get_db_connection():
     return mysql.connector.connect(**db_config)
 
