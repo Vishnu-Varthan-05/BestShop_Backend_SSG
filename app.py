@@ -68,19 +68,41 @@ def get_all_categories():
             cursor.close()
             connection.close()
 
-# @app.route('/category-fields', methods = ['GET'])
-# def get_all_category_fields():
-#     try:
-#         connection = get_db_connection()
-#         cursor = connection.cursor(dictionary = True)
-#         cursor.execute('SELECT * FROM category_fields')
-#         category_fields = cursor.fetchall()
-#         return jsonify(category_fields)
-#     except Exception as e:
-#         return jsonify({'error': str(e)})
-#     finally:
-#         cursor.close()
-#         connection.close()
+@app.route('/category-fields', methods = ['GET', 'POST'])
+def get_all_category_fields():
+    if request.method == 'GET':
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(dictionary = True)
+            cursor.execute('SELECT * FROM category_fields')
+            category_fields = cursor.fetchall()
+            return jsonify(category_fields)
+        except Exception as e:
+            return jsonify({'error': str(e)})
+        finally:
+            cursor.close()
+            connection.close()   
+    
+    elif request.method == 'POST':
+        cursor = None
+        connection = None
+        try:
+            data = request.json
+            category_id = int(data['category_id'])
+            field_name = data['field_name']
+            field_type = data['type']
+            has_separate_page = int(data['has_separate_page'])
+            connection = get_db_connection()
+            cursor = connection.cursor()
+            cursor.execute(
+                'INSERT INTO category_fields (category_id, field_name, type, has_separate_page) VALUES (%s, %s, %s, %s)',
+                (category_id, field_name, field_type, has_separate_page)
+            )
+            connection.commit()
+            return jsonify({'message': 'Category field added successfully'})
+        except Exception as e:
+            app.logger.error(f"Error adding category field: {str(e)}")
+            return jsonify({'error': 'Internal Server Error'}), 500 
 
 # @app.route('/fields-details', methods=['GET'])
 # def get_all_field_details():
@@ -129,4 +151,4 @@ def uploaded_file(filename):
     return send_from_directory('uploads', filename)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    app.run(debug=True, host = '0.0.0.0')

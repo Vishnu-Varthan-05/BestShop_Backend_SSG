@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Category Fields API Test</title>
+</head>
+<body>
+    <h1>Category Fields API Test</h1>
+
+    <h2>Add Category Field</h2>
+    <form id="addCategoryFieldForm">
+        <label for="category_id">Category:</label>
+        <select id="category_id" name="category_id" required></select><br>
+        
+        <label for="field_name">Field Name:</label>
+        <input type="text" id="field_name" name="field_name" required><br>
+        
+        <label for="type">Field Type:</label>
+        <input type="text" id="type" name="type" required><br>
+        
+        <label for="has_separate_page">Has Separate Page:</label>
+        <input type="checkbox" id="has_separate_page" name="has_separate_page" value="1"><br>
+
+        <button type="button" onclick="addCategoryField()">Add Category Field</button>
+    </form>
+
+    <hr>
+
+    <script>
+        const API_BASE_URL = 'http://10.10.162.193:5000'; // Replace with your server's IP and port
+
+        function populateCategoriesDropdown() {
+            const categoryDropdown = document.getElementById('category_id');
+            fetch(`${API_BASE_URL}/categories`, { method: 'GET' })
+                .then(response => response.json())
+                .then(categories => {
+                    categories.forEach(category => {
+                        const option = document.createElement('option');
+                        option.value = category.category_id;
+                        option.text = category.category_name;
+                        categoryDropdown.add(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching categories:', error);
+                });
+        }
+
+        window.onload = function () {
+            populateCategoriesDropdown();
+        };
+
+        function addCategoryField() {
+            const form = document.getElementById('addCategoryFieldForm');
+            const formData = new FormData(form);
+            const formDataJSON = {};
+            formData.forEach((value, key) => {
+                if (key === 'has_separate_page') {
+                    formDataJSON[key] = value === '1' ? 1 : 0;
+                } else {
+                    formDataJSON[key] = value;
+                }
+            });
+
+            fetch(`${API_BASE_URL}/category-fields`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formDataJSON),
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+    </script>
+</body>
+</html>
