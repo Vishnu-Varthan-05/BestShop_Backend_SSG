@@ -30,101 +30,155 @@ def get_db_connection():
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
 
-@app.route('/field-details', methods=['GET', 'POST'])
-def manage_field_details():
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        if request.method == 'GET':
-            cursor.execute('SELECT * FROM field_details')
-            field_details = cursor.fetchall()
-            return jsonify(field_details)
-        elif request.method == 'POST':
-            data = request.form
-            field_name = data['field_name']
-            details_name = data['details_name']
-            cursor.execute('SELECT field_id FROM category_fields WHERE field_name = %s', (field_name,))
-            field_id_tuple = cursor.fetchone()
-            if not field_id_tuple:
-                return jsonify({'error': 'Invalid field_name'}), 400
-            field_id = field_id_tuple['field_id']
-            cursor.execute(
-                'INSERT INTO field_details (field_id, details_name) VALUES (%s, %s)',
-                (field_id, details_name)
-            )
-            connection.commit()
-            field_details_id = cursor.lastrowid
-            if 'image' in request.files:
-                file = request.files['image']
-                if file and allowed_file(file.filename):
-                    filename = f"{field_details_id}_{secure_filename(file.filename)}"
-                    file_to_be_saved = os.path.join(app.config['UPLOAD_FOLDER'], 'images', 'field_details', filename)
-                    file.save(file_to_be_saved)
-                    cursor.execute(
-                        'UPDATE field_details SET details_image = %s WHERE detail_id = %s',
-                        (file_to_be_saved, field_details_id)
-                    )
-                    connection.commit()
-            return jsonify({'message': 'Field details added successfully'})
-    except mysql.connector.Error as e:
-        app.logger.error(f"Error: {str(e)}")
-        return jsonify({'error': 'Internal Server Error'}), 500
-    finally:
-        cursor.close()
-        connection.close()
-@app.route('/dropdown/<path:text>', methods=['GET'])
-def get_dropdown_options(text):
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        if text.isdigit():
-            cursor.execute('SELECT field_name FROM category_fields WHERE category_id = %s', (text,))
-            options = [result['field_name'] for result in cursor.fetchall()]
-        elif text == 'category':
-            cursor.execute('SELECT category_name FROM category')
-            options = [result['category_name'] for result in cursor.fetchall()]
-        elif text == 'category_fields':
-            cursor.execute('SELECT field_name FROM category_fields')
-            options = [result['field_name'] for result in cursor.fetchall()]
-        elif text.startswith('category_fields/'):
-            category_name = text.split('/')[1]
-            cursor.execute('SELECT category_id FROM category WHERE category_name = %s', (category_name,))
-            category_id = cursor.fetchone().get('category_id')
-            cursor.execute('SELECT field_name FROM category_fields WHERE category_id = %s', (category_id,))
-            options = [result['field_name'] for result in cursor.fetchall()]
-        else:
-            return jsonify({'error': 'Invalid text parameter'})
-        return jsonify(options)
-
-    except Exception as e:
-        return jsonify({'error': str(e)})
-    finally:
-        cursor.close()
-        connection.close()
-
-# @app.route('/get_id/<path:text>', methods=['GET'])
-# def get_respective_id(text):
+# @app.route('/dashboard-data', methods=['GET'])
+# def get_dashboard_data():
+#     cursor = None 
 #     try:
 #         connection = get_db_connection()
-#         cursor = connection.cursor(dictionary=True)
-#         if text.startswith('category/'):
-#             category_name = text.split('/')[1]
-#             cursor.execute('SELECT category_id FROM category WHERE category_name = %s', (category_name,))
-#             category_id = cursor.fetchone().get('category_id')
-#             return jsonify({'category_id': category_id})
-#         elif text.startswith('category_fields/'):
-#             field_name = text.split('/')[1]
-#             cursor.execute('SELECT field_id FROM category_fields WHERE field_name = %s', (field_name,))
-#             field_id = cursor.fetchone().get('field_id')
-#             return jsonify({'field_id': field_id})
-#         else:
-#             return jsonify({'error': 'Invalid text parameter'})
-
-#     except Exception as e:
-#         return jsonify({'error': str(e)})
+#         cursor = connection.cursor()
+#         query = """
+#         SELECT
+#             SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 181 AND 300 THEN price ELSE 0 END) AS price_close_to_1_year,
+#             SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 31 AND 180 THEN price ELSE 0 END) AS price_above_6_months,
+#             SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) <= 30 THEN price ELSE 0 END) AS price_above_1_month,
+#             SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 181 AND 300 THEN quantity ELSE 0 END) AS quantity_close_to_1_year,
+#             SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 31 AND 180 THEN quantity ELSE 0 END) AS quantity_above_6_months,
+#             SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) <= 30 THEN quantity ELSE 0 END) AS quantity_above_1_month
+#         FROM stock_details
+#         """
+#         cursor.execute(query)
+#         result = cursor.fetchone()
+#         series = [
+#             {
+#                 'name': 'Price of the Product',
+#                 'data': [
+#                     result[0],  # Price close to 1 year
+#                     result[1],  # Price above 6 months
+#                     result[2]   # Price above 1 month
+#                 ]
+#             },
+#             {
+#                 'name': 'Product Count',
+#                 'data': [
+#                     result[3],  # Quantity close to 1 year
+#                     result[4],  # Quantity above 6 months
+#                     result[5]   # Quantity above 1 month
+#                 ]
+#             }
+#         ]
+#         return jsonify({'series': series})
+#     except mysql.connector.Error as e:
+#         return jsonify({'error': str(e)}), 500
 #     finally:
-#         cursor.close()
-#         connection.close()
+#         if cursor is not None:
+#             cursor.close()
+@app.route('/stocks', methods=['GET', 'POST'])
+def manage_stocks():
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    if request.method == 'GET':
+        try:
+            cursor.execute('''
+                SELECT 
+                    s.stock_id,
+                    DATE_FORMAT(s.time_added, '%H:%i:%s') AS time_added,
+                    DATE_FORMAT(s.date_added, '%Y-%m-%d') AS date_added,
+                    s.name AS stock_name,
+                    s.quantity,
+                    s.price,
+                    c.category_name,
+                    GROUP_CONCAT(fd.details_name) AS field_details_name
+                FROM 
+                    stock_details s
+                INNER JOIN 
+                    mapping_table m ON s.stock_id = m.stock_id
+                INNER JOIN
+                    category c ON m.category_id = c.category_id
+                INNER JOIN
+                    field_details fd ON m.field_details_id = fd.detail_id
+                GROUP BY 
+                    s.stock_id, s.time_added, s.date_added, s.name, s.quantity, s.price, c.category_name
+            ''')
+            stocks = cursor.fetchall()
+            for stock in stocks:
+                stock['time_added'] = str(stock['time_added'])
+                stock['date_added'] = str(stock['date_added'])
+                stock['field_details_name'] = stock['field_details_name'].split(',')
+            return jsonify(stocks)
+        except mysql.connector.Error as e:
+            return jsonify({'error': str(e)}), 500
+        finally:
+            cursor.close()
+            connection.close()
+    elif request.method == 'POST':
+        try:
+            data = request.json
+            category_id = int(data['category_id'])
+            field_details_ids = data['field_details_id']
+            name = data['name']
+            quantity = int(data['quantity'])
+            price = int(data['price'])
+            cursor.execute(
+                'INSERT INTO stock_details (time_added, date_added, name, quantity, price) VALUES (CURRENT_TIME(), CURRENT_DATE(), %s, %s, %s)',
+                (name, quantity, price)
+            )
+            connection.commit()
+            stock_id = cursor.lastrowid
+            for field_details_id in field_details_ids:
+                cursor.execute(
+                    'INSERT INTO mapping_table (stock_id, category_id, field_details_id) VALUES (%s, %s, %s)',
+                    (stock_id, category_id, field_details_id)
+                )
+                connection.commit()
+            return jsonify({'message': 'Stock added successfully'})
+        
+        except mysql.connector.Error as e:
+            return jsonify({'error': str(e)}), 500
+        finally:
+            cursor.close()
+            connection.close()
+@app.route('/dashboard-data', methods=['GET'])
+def get_dashboard_data():
+    cursor = None 
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        query = """
+        SELECT
+            SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 181 AND 300 THEN price * quantity ELSE 0 END) AS price_close_to_1_year,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 31 AND 180 THEN price * quantity ELSE 0 END) AS price_above_6_months,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) <= 30 THEN price * quantity ELSE 0 END) AS price_above_1_month,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 181 AND 300 THEN quantity ELSE 0 END) AS quantity_close_to_1_year,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 31 AND 180 THEN quantity ELSE 0 END) AS quantity_above_6_months,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) <= 30 THEN quantity ELSE 0 END) AS quantity_above_1_month
+        FROM stock_details
+        """
+        cursor.execute(query)
+        result = cursor.fetchone()
+        series = [
+            {
+                'name': 'Price of the Product',
+                'data': [
+                    result[0],  # Price close to 1 year
+                    result[1],  # Price above 6 months
+                    result[2]   # Price above 1 month
+                ]
+            },
+            {
+                'name': 'Product Count',
+                'data': [
+                    result[3],  # Quantity close to 1 year
+                    result[4],  # Quantity above 6 months
+                    result[5]   # Quantity above 1 month
+                ]
+            }
+        ]
+        return jsonify({'series': series})
+    except mysql.connector.Error as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor is not None:
+            cursor.close()
 
 if __name__ == '__main__':
-    app.run(debug=True, host = '0.0.0.0')
+    app.run(debug=True, host = '0.0.0.0', port=100)
