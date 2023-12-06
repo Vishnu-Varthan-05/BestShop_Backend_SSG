@@ -30,34 +30,36 @@ def get_db_connection():
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
 
+@app.route('/categories/<int:categoryID>/<int:fieldID>', methods=['GET'])
+@app.route('/categories/<int:categoryID>', methods=['GET'])
 @app.route('/categories', methods=['GET', 'POST'])
-def get_all_categories():
-    if request.method == 'GET':
-        try:
-            connection = get_db_connection()
-            cursor = connection.cursor(dictionary=True)
-            cursor.execute('SELECT * FROM category')
-            categories = cursor.fetchall()
-            return jsonify(categories)
-        except Exception as e:
-            return jsonify({'error': str(e)})
-        finally:
-            cursor.close()
-            connection.close()
-    
-    elif request.method == 'POST':
-        try:
+def categories(categoryID=None, fieldID=None):
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        if request.method == 'GET':
+            if categoryID is not None and fieldID is not None:
+                if fieldID == 0:
+                    cursor.execute('SELECT * FROM field_details fd INNER JOIN category_fields f ON f.field_id = fd.field_id INNER JOIN category c ON c.category_id = f.category_id ORDER BY f.field_id DESC')
+                else:
+                    cursor.execute('SELECT * FROM field_details WHERE field_id = %s', (fieldID,))
+            elif categoryID is not None:
+                if categoryID == 0:
+                    cursor.execute('SELECT * FROM category_fields f INNER JOIN category c ON c.category_id = f.category_id ORDER BY c.category_id DESC')
+                else:
+                    cursor.execute('SELECT * FROM category_fields WHERE category_id = %s', (categoryID,))
+            else:
+                cursor.execute('SELECT * FROM category')
+            result = cursor.fetchall()
+            return jsonify(result)
+        elif request.method == 'POST':
             data = request.form
             category_name = data['category_name']
-
             connection = get_db_connection()
             cursor = connection.cursor()
-
             cursor.execute('INSERT INTO category (category_name) VALUES (%s)', (category_name,))
             connection.commit()
-
             category_id = cursor.lastrowid
-
             if 'image' in request.files:
                 file = request.files['image']
                 if file and allowed_file(file.filename):
@@ -66,14 +68,21 @@ def get_all_categories():
                     file.save(fileToBeSaved)
                     cursor.execute('UPDATE category SET category_image = %s WHERE category_id = %s', (fileToBeSaved, category_id))
                     connection.commit()
-
             return jsonify({'message': 'Category added successfully'})
-        except Exception as e:
-            app.logger.error(f"Error adding category: {str(e)}")
-            return jsonify({'error': 'Internal Server Error'}), 500
-        finally:
-            cursor.close()
-            connection.close()
+        elif request.method == 'GET' and categoryID is not None and fieldID is None:
+            cursor.execute('SELECT * FROM category_fields WHERE category_id = %s', (categoryID,))
+            category_fields = cursor.fetchall()
+            return jsonify(category_fields)
+        elif request.method == 'GET' and categoryID is not None and fieldID is not None:
+            cursor.execute('SELECT * FROM field_details WHERE field_id = %s', (fieldID,))
+            field_details = cursor.fetchall()
+            return jsonify(field_details)
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+    finally:
+        cursor.close()
+        connection.close()
 
 @app.route('/category-fields', methods = ['GET', 'POST'])
 def get_all_category_fields():
@@ -89,7 +98,6 @@ def get_all_category_fields():
         finally:
             cursor.close()
             connection.close()   
-    
     elif request.method == 'POST':
         cursor = None
         connection = None
@@ -113,31 +121,22 @@ def get_all_category_fields():
 
 @app.route('/field-details', methods=['GET', 'POST'])
 def manage_field_details():
-    connection = get_db_connection()
-    cursor = connection.cursor(dictionary=True)
-    if request.method == 'GET':
-        try:
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        if request.method == 'GET':
             cursor.execute('SELECT * FROM field_details')
             field_details = cursor.fetchall()
             return jsonify(field_details)
-        except mysql.connector.Error as e:
-            return jsonify({'error': str(e)}), 500
-        finally:
-            cursor.close()
-            connection.close()
-    
-    elif request.method == 'POST':
-        try:
+        elif request.method == 'POST':
             data = request.form
             field_name = data['field_name']
             details_name = data['details_name']
-            connection = get_db_connection()
-            cursor = connection.cursor()
             cursor.execute('SELECT field_id FROM category_fields WHERE field_name = %s', (field_name,))
             field_id_tuple = cursor.fetchone()
             if not field_id_tuple:
                 return jsonify({'error': 'Invalid field_name'}), 400
-            field_id = field_id_tuple[0]
+            field_id = field_id_tuple['field_id']
             cursor.execute(
                 'INSERT INTO field_details (field_id, details_name) VALUES (%s, %s)',
                 (field_id, details_name)
@@ -156,37 +155,9 @@ def manage_field_details():
                     )
                     connection.commit()
             return jsonify({'message': 'Field details added successfully'})
-        except mysql.connector.Error as e:
-            app.logger.error(f"Error adding field details: {str(e)}")
-            return jsonify({'error': 'Internal Server Error'}), 500
-        finally:
-            cursor.close()
-            connection.close()
-
-@app.route('/categories/<int:categoryID>', methods=['GET'])
-def get_category_fields(categoryID):
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        cursor.execute('SELECT * FROM category_fields WHERE category_id = %s', (categoryID,))
-        category_fields = cursor.fetchall()
-        return jsonify(category_fields)
-    except Exception as e:
-        return jsonify({'error': str(e)})
-    finally:
-        cursor.close()
-        connection.close()
-
-@app.route('/categories/<int:categoryID>/<int:fieldID>', methods=['GET'])
-def get_field_details(categoryID, fieldID):
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        cursor.execute('SELECT * FROM field_details WHERE field_id = %s', (fieldID,))
-        field_details = cursor.fetchall()
-        return jsonify(field_details)
-    except Exception as e:
-        return jsonify({'error': str(e)})
+    except mysql.connector.Error as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Internal Server Error'}), 500
     finally:
         cursor.close()
         connection.close()
@@ -224,13 +195,11 @@ def manage_stocks():
                 stock['date_added'] = str(stock['date_added'])
                 stock['field_details_name'] = stock['field_details_name'].split(',')
             return jsonify(stocks)
-
         except mysql.connector.Error as e:
             return jsonify({'error': str(e)}), 500
         finally:
             cursor.close()
             connection.close()
-
     elif request.method == 'POST':
         try:
             data = request.json
@@ -258,7 +227,7 @@ def manage_stocks():
         finally:
             cursor.close()
             connection.close()
-            
+
 @app.route('/dropdown/<path:text>', methods=['GET'])
 def get_dropdown_options(text):
     try:
