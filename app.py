@@ -137,6 +137,8 @@ def manage_field_details():
             if not field_id_tuple:
                 return jsonify({'error': 'Invalid field_name'}), 400
             field_id = field_id_tuple['field_id']
+            connection = get_db_connection()
+            cursor = connection.cursor()
             cursor.execute(
                 'INSERT INTO field_details (field_id, details_name) VALUES (%s, %s)',
                 (field_id, details_name)
