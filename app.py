@@ -130,15 +130,8 @@ def manage_field_details():
             return jsonify(field_details)
         elif request.method == 'POST':
             data = request.form
-            field_name = data['field_name']
+            field_id = data['field_id']
             details_name = data['details_name']
-            cursor.execute('SELECT field_id FROM category_fields WHERE field_name = %s', (field_name,))
-            field_id_tuple = cursor.fetchone()
-            if not field_id_tuple:
-                return jsonify({'error': 'Invalid field_name'}), 400
-            field_id = field_id_tuple['field_id']
-            connection = get_db_connection()
-            cursor = connection.cursor()
             cursor.execute(
                 'INSERT INTO field_details (field_id, details_name) VALUES (%s, %s)',
                 (field_id, details_name)
@@ -284,17 +277,15 @@ def get_dropdown_options(text):
         elif text == 'category':
             cursor.execute('SELECT category_name FROM category')
             options = [result['category_name'] for result in cursor.fetchall()]
-        elif text == 'category_fields':
-            cursor.execute('SELECT field_name FROM category_fields')
-            options = [result['field_name'] for result in cursor.fetchall()]
         elif text.startswith('category_fields/'):
             category_name = text.split('/')[1]
             cursor.execute('SELECT category_id FROM category WHERE category_name = %s', (category_name,))
             category_id = cursor.fetchone().get('category_id')
-            cursor.execute('SELECT field_name FROM category_fields WHERE category_id = %s', (category_id,))
-            options = [result['field_name'] for result in cursor.fetchall()]
+            cursor.execute('SELECT field_id, field_name FROM category_fields WHERE category_id = %s', (category_id,))
+            options = cursor.fetchall()
         else:
             return jsonify({'error': 'Invalid text parameter'})
+
         return jsonify(options)
 
     except Exception as e:
@@ -302,7 +293,7 @@ def get_dropdown_options(text):
     finally:
         cursor.close()
         connection.close()
-
+        
 @app.route('/uploads/<path:filename>', methods=['GET'])
 def uploaded_file(filename):
     return send_from_directory('uploads', filename)

@@ -42,9 +42,10 @@
             // Create a FormData object
             var formData = new FormData();
 
-            // Append Category, Field, Details Name, and Image to FormData
+            // Append Category, Field ID, Field Name, Details Name, and Image to FormData
             formData.append('category_name', document.getElementById('category_name').value);
-            formData.append('field_name', document.getElementById('field_name').value);
+            formData.append('field_id', document.getElementById('field_name').value.split(',')[0]); // Extract field_id
+            formData.append('field_name', document.getElementById('field_name').value.split(',')[1]); // Extract field_name
             formData.append('details_name', document.getElementById('details_name').value);
             var imageInput = document.getElementById('image');
             formData.append('image', imageInput.files[0]);
@@ -97,7 +98,8 @@
                     fieldDropdown.innerHTML = '<option value="" selected disabled>Select Field</option>';
 
                     data.forEach(field => {
-                        fieldDropdown.innerHTML += `<option value="${field}">${field}</option>`;
+                        // Modify the option value to include both field_id and field_name
+                        fieldDropdown.innerHTML += `<option value="${field.field_id},${field.field_name}">${field.field_name}</option>`;
                     });
 
                     fieldDropdown.value = ""; // Reset the selected option
