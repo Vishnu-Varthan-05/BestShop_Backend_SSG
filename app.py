@@ -3,29 +3,41 @@ import mysql.connector
 from flask_cors import CORS
 import os
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
+import jwt
+import datetime
+
 
 app = Flask(__name__)
 CORS(app)
 
-db_config = {
-    'host': '10.30.10.13',
-    'user': 'bestshop',
-    'password': 'bestshop',
-    'database': 'best_shop',
-}
-
 # db_config = {
-#     'host': '127.0.0.1',
-#     'user': 'root',
-#     'password': '31125',
+#     'host': '10.30.10.13',
+#     'user': 'bestshop',
+#     'password': 'bestshop',
 #     'database': 'best_shop',
 # }
 
+db_config = {
+    'host': '127.0.0.1',
+    'user': 'root',
+    'password': '31125',
+    'database': 'best_shop',
+}
+SECRET_KEY = 'haha_here_is_my_big_secret!!!'
 UPLOAD_FOLDER = 'uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 def get_db_connection():
     return mysql.connector.connect(**db_config)
+
+def generate_token(user_id):
+    payload = {
+        'user_id': user_id,
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(days=1)  # Token expiration time
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    return token
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
@@ -297,5 +309,72 @@ def get_dropdown_options(text):
 def uploaded_file(filename):
     return send_from_directory('uploads', filename)
 
+@app.route('/add_users', methods=['POST'])
+def register_user():
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        data = request.json
+        username = data['username']
+        password = data['password']
+        is_admin = data.get('is_admin', 0) 
+
+        hashed_password = generate_password_hash(password)
+        cursor.execute('SELECT * FROM users WHERE username = %s', (username,))
+        existing_user = cursor.fetchone()
+
+        if existing_user:
+            return jsonify({'error': 'Username is already taken'}), 400
+
+        cursor.execute('INSERT INTO users (username, password, is_admin) VALUES (%s, %s, %s)', (username, hashed_password, is_admin))
+        connection.commit()
+        return jsonify({'message': 'User registered successfully'})
+
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.route('/login', methods=['POST'])
+def login_user():
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        data = request.json
+        username = data['username']
+        password = data['password']
+
+        cursor.execute('SELECT * FROM users WHERE username = %s', (username,))
+        user = cursor.fetchone()
+        if user and check_password_hash(user[2], password):
+            token = generate_token(user[0])
+            return jsonify({'token': token})
+        else:
+            return jsonify({'error': 'Invalid username or password'}), 401
+
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.route('/logout', methods=['POST'])
+def logout_user():
+    try:
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({'error': 'Token is missing'}), 401
+        return jsonify({'message': 'Logout successful'})
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+        
 if __name__ == '__main__':
     app.run(debug=True, host = '0.0.0.0')
