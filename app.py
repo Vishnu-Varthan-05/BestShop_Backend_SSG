@@ -169,6 +169,47 @@ def manage_field_details():
         cursor.close()
         connection.close()
 
+@app.route('/end_session/<int:session_id>', methods=['GET'])
+def end_session(session_id):
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
+        cursor.execute(f'''
+            SELECT 
+                s.stock_id,
+                DATE_FORMAT(s.time_added, '%H:%i:%s') AS time_added,
+                DATE_FORMAT(s.date_added, '%Y-%m-%d') AS date_added,
+                s.name AS stock_name,
+                s.quantity,
+                s.price,
+                c.category_name,
+                GROUP_CONCAT(fd.details_name) AS field_details_name
+            FROM 
+                stock_details s
+            INNER JOIN 
+                mapping_table m ON s.stock_id = m.stock_id
+            INNER JOIN
+                category c ON m.category_id = c.category_id
+            INNER JOIN
+                field_details fd ON m.field_details_id = fd.detail_id
+            WHERE 
+                s.session_id = {session_id} AND DATE(s.date_added) = CURDATE() 
+            GROUP BY 
+                s.stock_id, s.time_added, s.date_added, s.name, s.quantity, s.price, c.category_name
+        ''')
+        stocks = cursor.fetchall()
+        print(stocks)
+        for stock in stocks:
+            stock['time_added'] = str(stock['time_added'])
+            stock['date_added'] = str(stock['date_added'])
+            stock['field_details_name'] = stock['field_details_name'].split(',')
+        return jsonify({'session_id': session_id, 'stocks': stocks})
+    except mysql.connector.Error as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
 @app.route('/stocks', methods=['GET', 'POST'])
 def manage_stocks():
     connection = get_db_connection()
