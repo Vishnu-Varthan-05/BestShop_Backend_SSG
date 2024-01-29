@@ -11,19 +11,20 @@ import datetime
 app = Flask(__name__)
 CORS(app)
 
+db_config = {
+    'host': '10.30.10.13',
+    'user': 'bestshop',
+    'password': 'bestshop',
+    'database': 'best_shop',
+}
+
 # db_config = {
-#     'host': '10.30.10.13',
-#     'user': 'bestshop',
-#     'password': 'bestshop',
+#     'host': '127.0.0.1',
+#     'user': 'root',
+#     'password': '31125',
 #     'database': 'best_shop',
 # }
 
-db_config = {
-    'host': '127.0.0.1',
-    'user': 'root',
-    'password': '31125',
-    'database': 'best_shop',
-}
 SECRET_KEY = 'haha_here_is_my_big_secret!!!'
 UPLOAD_FOLDER = 'uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -34,7 +35,7 @@ def get_db_connection():
 def generate_token(user_id):
     payload = {
         'user_id': user_id,
-        'exp': datetime.datetime.utcnow() + datetime.timedelta(days=1)  # Token expiration time
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(days=1) 
     }
     token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
     return token
@@ -43,12 +44,13 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
 
 @app.route('/categories/<int:categoryID>/<int:fieldID>', methods=['GET'])
-@app.route('/categories/<int:categoryID>', methods=['GET'])
+@app.route('/categories/<int:categoryID>', methods=['GET', 'DELETE'])
 @app.route('/categories', methods=['GET', 'POST'])
 def categories(categoryID=None, fieldID=None):
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
+        
         if request.method == 'GET':
             if categoryID is not None and fieldID is not None:
                 if fieldID == 0:
@@ -64,6 +66,7 @@ def categories(categoryID=None, fieldID=None):
                 cursor.execute('SELECT * FROM category')
             result = cursor.fetchall()
             return jsonify(result)
+        
         elif request.method == 'POST':
             data = request.form
             category_name = data['category_name']
@@ -81,14 +84,35 @@ def categories(categoryID=None, fieldID=None):
                     cursor.execute('UPDATE category SET category_image = %s WHERE category_id = %s', (fileToBeSaved, category_id))
                     connection.commit()
             return jsonify({'message': 'Category added successfully'})
+        
+        elif request.method == 'DELETE' and categoryID is not None:
+            try:
+                cursor.execute('SELECT category_image FROM category WHERE category_id = %s', (categoryID,))
+                category_info = cursor.fetchone()
+                cursor.execute('DELETE FROM category WHERE category_id = %s', (categoryID,))
+                connection.commit()
+
+                if category_info and category_info['category_image']:
+                    image_path = category_info['category_image']
+                    if os.path.exists(image_path):
+                        os.remove(image_path)
+                return jsonify({'message': 'Category deleted successfully'})
+        
+            except Exception as e:
+                print(f"Error: {e}")
+                return jsonify({'error': 'Failed to delete category.. Category is not empty'}), 500
+
         elif request.method == 'GET' and categoryID is not None and fieldID is None:
             cursor.execute('SELECT * FROM category_fields WHERE category_id = %s', (categoryID,))
             category_fields = cursor.fetchall()
             return jsonify(category_fields)
+        
+
         elif request.method == 'GET' and categoryID is not None and fieldID is not None:
             cursor.execute('SELECT * FROM field_details WHERE field_id = %s', (fieldID,))
             field_details = cursor.fetchall()
             return jsonify(field_details)
+        
     except Exception as e:
         app.logger.error(f"Error: {str(e)}")
         return jsonify({'error': 'Internal Server Error'}), 500
@@ -97,8 +121,9 @@ def categories(categoryID=None, fieldID=None):
         connection.close()
 
 @app.route('/category-fields', methods = ['GET', 'POST'])
-def get_all_category_fields():
-    if request.method == 'GET':
+@app.route('/category-fields/<int:fieldID>', methods = ['DELETE'])
+def manage_fields(fieldID = None):
+    if request.method == 'GET' and fieldID is None:
         try:
             connection = get_db_connection()
             cursor = connection.cursor(dictionary = True)
@@ -110,11 +135,13 @@ def get_all_category_fields():
         finally:
             cursor.close()
             connection.close()   
-    elif request.method == 'POST':
+
+    elif request.method == 'POST' and fieldID is None:
         cursor = None
         connection = None
         try:
             data = request.json
+            print(data)
             category_id = int(data['category_id'])
             field_name = data['field_name']
             field_type = data['type']
@@ -130,17 +157,35 @@ def get_all_category_fields():
         except Exception as e:
             app.logger.error(f"Error adding category field: {str(e)}")
             return jsonify({'error': 'Internal Server Error'}), 500 
+        
+    elif request.method == 'DELETE' and fieldID is not None:
+        cursor = None
+        connection = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(dictionary=True)
+            cursor.execute('DELETE FROM category_fields WHERE field_id = %s', (fieldID,))
+            connection.commit()
+
+            return jsonify({'message': 'Feilds deleted successfully'})
+
+        except Exception as e:
+                print(f"Error: {e}")
+                return jsonify({'error': 'Failed to delete Field.. Field is not empty'}), 500 
+
 
 @app.route('/field-details', methods=['GET', 'POST'])
-def manage_field_details():
+@app.route('/field-details/<int:fieldDetailsID>', methods = ['DELETE'])
+def manage_field_details(fieldDetailsID = None):
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        if request.method == 'GET':
+        if request.method == 'GET' and fieldDetailsID is None:
             cursor.execute('SELECT * FROM field_details')
             field_details = cursor.fetchall()
             return jsonify(field_details)
-        elif request.method == 'POST':
+        
+        elif request.method == 'POST' and fieldDetailsID is None:
             data = request.form
             field_id = data['field_id']
             details_name = data['details_name']
@@ -162,6 +207,24 @@ def manage_field_details():
                     )
                     connection.commit()
             return jsonify({'message': 'Field details added successfully'})
+        
+        elif request.method == 'DELETE' and fieldDetailsID is not None:
+            try:
+                cursor.execute('SELECT details_image FROM field_details WHERE detail_id = %s', (fieldDetailsID,))
+                details_info = cursor.fetchone()
+                cursor.execute('DELETE FROM field_details WHERE detail_id = %s', (fieldDetailsID,))
+                connection.commit()
+
+                if details_info and details_info['details_image']:
+                    image_path = details_info['details_image']
+                    if os.path.exists(image_path):
+                        os.remove(image_path)
+                return jsonify({'message': 'Field detail deleted successfully'})
+            
+            except Exception as e:
+                print(f"Error: {e}")
+                return jsonify({'error': 'Failed to delete field detail.. There are some stockes Mapped to it.. '}), 500
+
     except mysql.connector.Error as e:
         app.logger.error(f"Error: {str(e)}")
         return jsonify({'error': 'Internal Server Error'}), 500
@@ -169,8 +232,8 @@ def manage_field_details():
         cursor.close()
         connection.close()
 
-@app.route('/end_session/<int:session_id>', methods=['GET'])
-def end_session(session_id):
+@app.route('/end_dist/<int:dist_id>', methods=['GET'])
+def end_dist(dist_id):
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
     try:
@@ -193,17 +256,17 @@ def end_session(session_id):
             INNER JOIN
                 field_details fd ON m.field_details_id = fd.detail_id
             WHERE 
-                s.session_id = {session_id} AND DATE(s.date_added) = CURDATE() 
+                s.dist_id = {dist_id} AND DATE(s.date_added) = CURDATE() 
             GROUP BY 
                 s.stock_id, s.time_added, s.date_added, s.name, s.quantity, s.price, c.category_name
         ''')
         stocks = cursor.fetchall()
-        print(stocks)
+        # print(stocks)
         for stock in stocks:
             stock['time_added'] = str(stock['time_added'])
             stock['date_added'] = str(stock['date_added'])
             stock['field_details_name'] = stock['field_details_name'].split(',')
-        return jsonify({'session_id': session_id, 'stocks': stocks})
+        return jsonify({'dist_id': dist_id, 'stocks': stocks})
     except mysql.connector.Error as e:
         return jsonify({'error': str(e)}), 500
     finally:
@@ -256,9 +319,10 @@ def manage_stocks():
             name = data['name']
             quantity = int(data['quantity'])
             price = int(data['price'])
+            dist_id = int(data['dist_id'])
             cursor.execute(
-                'INSERT INTO stock_details (time_added, date_added, name, quantity, price) VALUES (CURRENT_TIME(), CURRENT_DATE(), %s, %s, %s)',
-                (name, quantity, price)
+                'INSERT INTO stock_details (time_added, date_added, name, quantity, price, dist_id) VALUES (CURRENT_TIME(), CURRENT_DATE(), %s, %s, %s, %s)',
+                (name, quantity, price, dist_id)
             )
             connection.commit()
             stock_id = cursor.lastrowid
@@ -416,6 +480,6 @@ def logout_user():
     except Exception as e:
         app.logger.error(f"Error: {str(e)}")
         return jsonify({'error': 'Internal Server Error'}), 500
-        
+
 if __name__ == '__main__':
     app.run(debug=True, host = '0.0.0.0')
