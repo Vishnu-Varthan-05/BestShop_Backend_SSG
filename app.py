@@ -480,6 +480,54 @@ def logout_user():
     except Exception as e:
         app.logger.error(f"Error: {str(e)}")
         return jsonify({'error': 'Internal Server Error'}), 500
+    
+@app.route('/product-name', methods=['GET'])
+def get_product_names_grouped_by_category():
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute('''
+            SELECT
+                c.category_name,
+                s.name,
+                s.quantity,
+                s.price
+            FROM
+                stock_details s
+            INNER JOIN
+                mapping_table m ON s.stock_id = m.stock_id
+            INNER JOIN
+                category c ON m.category_id = c.category_id
+            ORDER BY
+                c.category_name
+        ''')
+
+        result = cursor.fetchall()
+
+        response_data = {}
+        for row in result:
+            category_name = row['category_name']
+            if category_name not in response_data:
+                response_data[category_name] = []
+
+            product_details = {
+                'name': row['name'],
+                'quantity': row['quantity'],
+                'price': row['price']
+            }
+
+            response_data[category_name].append(product_details)
+
+        return jsonify(response_data)
+
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+    finally:
+        cursor.close()
+        connection.close()
 
 if __name__ == '__main__':
     app.run(debug=True, host = '0.0.0.0')
