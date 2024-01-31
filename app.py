@@ -489,16 +489,19 @@ def get_product_names_grouped_by_category():
 
         cursor.execute('''
             SELECT
+                DISTINCT s.stock_id,
                 c.category_name,
                 s.name,
+                DATE_FORMAT(s.time_added, '%H:%i:%s') AS time_added,
+                DATE_FORMAT(s.date_added, '%Y-%m-%d') AS date_added,
                 s.quantity,
                 s.price
             FROM
-                stock_details s
+                mapping_table m
             INNER JOIN
-                mapping_table m ON s.stock_id = m.stock_id
+                stock_details s USING(stock_id)
             INNER JOIN
-                category c ON m.category_id = c.category_id
+                category c USING(category_id)
             ORDER BY
                 c.category_name
         ''')
@@ -513,6 +516,8 @@ def get_product_names_grouped_by_category():
 
             product_details = {
                 'name': row['name'],
+                'time_added': str(row['time_added']),
+                'date_added': str(row['date_added']),
                 'quantity': row['quantity'],
                 'price': row['price']
             }
