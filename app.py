@@ -6,24 +6,24 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import datetime
-
+from collections import defaultdict
 
 app = Flask(__name__)
 CORS(app)
 
-db_config = {
-    'host': '10.30.10.13',
-    'user': 'bestshop',
-    'password': 'bestshop',
-    'database': 'best_shop',
-}
-
 # db_config = {
-#     'host': '127.0.0.1',
-#     'user': 'root',
-#     'password': '31125',
+#     'host': '10.30.10.13',
+#     'user': 'bestshop',
+#     'password': 'bestshop',
 #     'database': 'best_shop',
 # }
+
+db_config = {
+    'host': '127.0.0.1',
+    'user': 'bakka',
+    'password': 'lol',
+    'database': 'best_shop',
+}
 
 SECRET_KEY = 'haha_here_is_my_big_secret!!!'
 UPLOAD_FOLDER = 'uploads'
@@ -232,113 +232,114 @@ def manage_field_details(fieldDetailsID = None):
         cursor.close()
         connection.close()
 
-@app.route('/end_dist/<int:dist_id>', methods=['GET'])
-def end_dist(dist_id):
-    connection = get_db_connection()
-    cursor = connection.cursor(dictionary=True)
-    try:
-        cursor.execute(f'''
-            SELECT 
-                s.stock_id,
-                DATE_FORMAT(s.time_added, '%H:%i:%s') AS time_added,
-                DATE_FORMAT(s.date_added, '%Y-%m-%d') AS date_added,
-                s.name AS stock_name,
-                s.quantity,
-                s.price,
-                c.category_name,
-                GROUP_CONCAT(fd.details_name) AS field_details_name
-            FROM 
-                stock_details s
-            INNER JOIN 
-                mapping_table m ON s.stock_id = m.stock_id
-            INNER JOIN
-                category c ON m.category_id = c.category_id
-            INNER JOIN
-                field_details fd ON m.field_details_id = fd.detail_id
-            WHERE 
-                s.dist_id = {dist_id} AND DATE(s.date_added) = CURDATE() 
-            GROUP BY 
-                s.stock_id, s.time_added, s.date_added, s.name, s.quantity, s.price, c.category_name
-        ''')
-        stocks = cursor.fetchall()
-        # print(stocks)
-        for stock in stocks:
-            stock['time_added'] = str(stock['time_added'])
-            stock['date_added'] = str(stock['date_added'])
-            stock['field_details_name'] = stock['field_details_name'].split(',')
-        return jsonify({'dist_id': dist_id, 'stocks': stocks})
-    except mysql.connector.Error as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        cursor.close()
-        connection.close()
 
 @app.route('/stocks', methods=['GET', 'POST'])
 def manage_stocks():
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
+
     if request.method == 'GET':
         try:
             cursor.execute('''
-                SELECT 
-                    s.stock_id,
-                    DATE_FORMAT(s.time_added, '%H:%i:%s') AS time_added,
-                    DATE_FORMAT(s.date_added, '%Y-%m-%d') AS date_added,
-                    s.name AS stock_name,
-                    s.quantity,
-                    s.price,
-                    c.category_name,
-                    GROUP_CONCAT(fd.details_name) AS field_details_name
-                FROM 
-                    stock_details s
-                INNER JOIN 
-                    mapping_table m ON s.stock_id = m.stock_id
-                INNER JOIN
-                    category c ON m.category_id = c.category_id
-                INNER JOIN
-                    field_details fd ON m.field_details_id = fd.detail_id
-                GROUP BY 
-                    s.stock_id, s.time_added, s.date_added, s.name, s.quantity, s.price, c.category_name
-            ''')
-            stocks = cursor.fetchall()
-            for stock in stocks:
-                stock['time_added'] = str(stock['time_added'])
-                stock['date_added'] = str(stock['date_added'])
-                stock['field_details_name'] = stock['field_details_name'].split(',')
-            return jsonify(stocks)
+            SELECT DISTINCT
+                c.category_name,
+                TIME_FORMAT(s.time_added, '%H:%i:%s') AS time_added,
+                DATE_FORMAT(s.date_added, '%Y-%m-%d') AS date_added,
+                s.name AS stock_name,
+                msq.model_name,
+                s.selling_price,
+                msq.size,
+                msq.quantity
+            FROM 
+                stock_details s
+            LEFT JOIN 
+                model_size_quantity msq USING(stock_id)
+            INNER JOIN
+                mapping_table mt USING(stock_id)
+            INNER JOIN
+                category c
+            WHERE 
+                s.date_added = CURDATE()
+        ''')
+
+            rows = cursor.fetchall()
+
+            stocks_by_category = defaultdict(list)
+
+            for row in rows:
+                category_name = row['category_name']
+
+                formatted_stock = {
+                    'date_added': str(row['date_added']),
+                    'time_added': str(row['time_added']),
+                    'stock_name': row['stock_name'],
+                    'model_name': row['model_name'],
+                    'quantity': row['quantity'],
+                    'selling_price': row['selling_price'],
+                    'size': row['size'],
+                    'total_price': row['quantity'] * row['selling_price']
+                }
+
+                stocks_by_category[category_name].append(formatted_stock)
+
+            formatted_stocks = []
+
+            for category_name, category_stocks in stocks_by_category.items():
+                result_data = {
+                    'category_name': category_name,
+                    'stocks': category_stocks
+                }
+                formatted_stocks.append(result_data)
+            return jsonify(formatted_stocks)
         except mysql.connector.Error as e:
             return jsonify({'error': str(e)}), 500
         finally:
             cursor.close()
             connection.close()
+
     elif request.method == 'POST':
         try:
             data = request.json
-            category_id = int(data['category_id'])
+            category_id = data['category_id']
+            dist_id = data['dist_id']
             field_details_ids = data['field_details_id']
+            model = data['model']
+            mrp = data['mrp']
             name = data['name']
-            quantity = int(data['quantity'])
-            price = int(data['price'])
-            dist_id = int(data['dist_id'])
+            purchasing_price = data['purchasing_price']
+            quantity = data['quantities']
+            selling_price = data['selling_price']
+            size = data['sizes']
             cursor.execute(
-                'INSERT INTO stock_details (time_added, date_added, name, quantity, price, dist_id) VALUES (CURRENT_TIME(), CURRENT_DATE(), %s, %s, %s, %s)',
-                (name, quantity, price, dist_id)
+                'INSERT INTO stock_details (time_added, date_added, name, purchasing_price, selling_price, mrp, dist_id) VALUES (CURRENT_TIME(), CURRENT_DATE(), %s, %s, %s, %s, %s)',
+                (name, purchasing_price, selling_price, mrp, dist_id)
             )
             connection.commit()
             stock_id = cursor.lastrowid
+
             for field_details_id in field_details_ids:
                 cursor.execute(
                     'INSERT INTO mapping_table (stock_id, category_id, field_details_id) VALUES (%s, %s, %s)',
                     (stock_id, category_id, field_details_id)
                 )
                 connection.commit()
+
+            for i in range(len(size)):
+                cursor.execute(
+                    'INSERT INTO model_size_quantity (stock_id, model_name, size, quantity) VALUES (%s, %s, %s, %s)',
+                    (stock_id, model, size[i], quantity[i])
+                )
+                connection.commit()
+
             return jsonify({'message': 'Stock added successfully'})
-        
+
         except mysql.connector.Error as e:
             return jsonify({'error': str(e)}), 500
         finally:
             cursor.close()
             connection.close()
+
+        
 
 @app.route('/dashboard-data', methods=['GET'])
 def get_dashboard_data():
@@ -346,41 +347,104 @@ def get_dashboard_data():
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
-        query = """
-        SELECT
-            SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 181 AND 300 THEN price * quantity ELSE 0 END) AS price_close_to_1_year,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 31 AND 180 THEN price * quantity ELSE 0 END) AS price_above_6_months,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) <= 30 THEN price * quantity ELSE 0 END) AS price_above_1_month,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 181 AND 300 THEN quantity ELSE 0 END) AS quantity_close_to_1_year,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 31 AND 180 THEN quantity ELSE 0 END) AS quantity_above_6_months,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) <= 30 THEN quantity ELSE 0 END) AS quantity_above_1_month,
-            COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 181 AND 300 THEN price * quantity ELSE 0 END) / NULLIF(SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 181 AND 300 THEN quantity ELSE 0 END), 0), 0) AS rate_close_to_1_year,
-            COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 31 AND 180 THEN price * quantity ELSE 0 END) / NULLIF(SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) BETWEEN 31 AND 180 THEN quantity ELSE 0 END), 0), 0) AS rate_above_6_months,
-            COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) <= 30 THEN price * quantity ELSE 0 END) / NULLIF(SUM(CASE WHEN DATEDIFF(CURDATE(), date_added) <= 30 THEN quantity ELSE 0 END), 0), 0) AS rate_above_1_month
-        FROM stock_details
-        """
-        cursor.execute(query)
-        result = cursor.fetchone()
-        series = [
-            {
-                'name': 'Price of the Product',
-                'data': [result[0], result[1], result[2]]
-            },
-            {
-                'name': 'Product Count',
-                'data': [result[3], result[4], result[5]]
-            },
-            {
-                'name': 'Rate of the Product',
-                'data': [result[6], result[7], result[8]]
-            }
-        ]
+        cursor.execute("""
+            SELECT
+                SUM(msq.quantity) AS total_quantity,
+                SUM(stock_details.selling_price * msq.quantity) AS total_price
+            FROM
+                model_size_quantity msq
+            INNER JOIN stock_details USING(stock_id)
+            GROUP BY
+                CASE
+                    WHEN DATEDIFF(CURDATE(), stock_details.date_added) < 30 THEN 'less_than_30_days'
+                    WHEN DATEDIFF(CURDATE(), stock_details.date_added) BETWEEN 30 AND 180 THEN 'between_30_and_180_days'
+                    WHEN DATEDIFF(CURDATE(), stock_details.date_added) > 180 THEN 'more_than_180_days'
+                END;
+            """)
+        result = cursor.fetchall()
+        series = []
+        if len(result) > 0:
+            series.append({
+                'name': 'Less than 30 days',
+                'data': [result[0][0], result[0][1], result[0][1] / result[0][0]]
+            })
+
+        if len(result) > 1:
+            series.append({
+                'name': 'Between 30 to 180 days',
+                'data': [result[1][0], result[1][1], result[1][1] / result[1][0]]
+            })
+
+        if len(result) > 2:
+            series.append({
+                'name': 'More than 180 days',
+                'data': [result[2][0], result[2][1], result[2][1] / result[2][0]]
+            })
         return jsonify({'series': series})
     except mysql.connector.Error as e:
         return jsonify({'error': str(e)}), 500
     finally:
         if cursor is not None:
             cursor.close()
+
+@app.route('/generate-excel', methods=['POST'])
+def generate_excel():
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        data = request.json
+        dist_id = data['dist_id']
+        item_name_place = data['item_name']
+        main_category_place = data['main_category']
+        sub_category_place = data['sub_category']
+        brand_place = data['brand']
+        cursor.execute('''SELECT
+            s.name,
+            msq.model_name,
+            msq.size,
+            msq.quantity,
+            s.purchasing_price,
+            s.selling_price,
+            s.mrp
+        FROM stock_details s
+        INNER JOIN model_size_quantity msq USING(stock_id)
+        WHERE s.dist_id = %s AND s.date_added = CURDATE()
+        ''', (dist_id,))
+
+        stocks = cursor.fetchall()
+
+        if not stocks:
+            return jsonify({'message': 'No records found for the given distributor and date.'})
+
+        formatted_stocks = {
+            'dist_id': dist_id,
+            'stocks': []
+        }
+
+        for stock in stocks:
+            parsed_name = stock['name'].split('-')
+            formatted_stock = {
+                'ItemName': parsed_name[item_name_place-1],
+                'QTY': stock['quantity'],
+                'PurchasePrice': stock['purchasing_price'],
+                'SellingPrice': stock['selling_price'],
+                'MRP': stock['mrp'],
+                'MAIN CATEGORY': parsed_name[main_category_place-1],
+                'SUB CATEGORY': parsed_name[sub_category_place-1],
+                'BRAND': parsed_name[brand_place-1],
+                'SIZES': stock['size'],
+                'STYLE MODE': stock['model_name'],
+            }
+            formatted_stocks['stocks'].append(formatted_stock)
+
+        return jsonify(formatted_stocks)
+
+    except mysql.connector.Error as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        connection.close()
 
 @app.route('/dropdown/<path:text>', methods=['GET'])
 def get_dropdown_options(text):
@@ -480,52 +544,18 @@ def logout_user():
     except Exception as e:
         app.logger.error(f"Error: {str(e)}")
         return jsonify({'error': 'Internal Server Error'}), 500
-    
-@app.route('/product-name', methods=['GET'])
-def get_product_names_grouped_by_category():
+
+@app.route('/sample', methods = ['GET'])
+def sample_data():
     try:
         connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-
-        cursor.execute('''
-            SELECT
-                DISTINCT s.stock_id,
-                c.category_name,
-                s.name,
-                DATE_FORMAT(s.time_added, '%H:%i:%s') AS time_added,
-                DATE_FORMAT(s.date_added, '%Y-%m-%d') AS date_added,
-                s.quantity,
-                s.price
-            FROM
-                mapping_table m
-            INNER JOIN
-                stock_details s USING(stock_id)
-            INNER JOIN
-                category c USING(category_id)
-            ORDER BY
-                c.category_name
-        ''')
-
-        result = cursor.fetchall()
-
-        response_data = {}
-        for row in result:
-            category_name = row['category_name']
-            if category_name not in response_data:
-                response_data[category_name] = []
-
-            product_details = {
-                'name': row['name'],
-                'time_added': str(row['time_added']),
-                'date_added': str(row['date_added']),
-                'quantity': row['quantity'],
-                'price': row['price']
-            }
-
-            response_data[category_name].append(product_details)
-
-        return jsonify(response_data)
-
+        cursor = connection.cursor()
+        cursor.execute('select name from stock_details limit 1')
+        stock_name = cursor.fetchall()
+        if stock_name:
+            return(jsonify(stock_name))
+        else:
+            return(jsonify("Stock list is empty"))
     except Exception as e:
         app.logger.error(f"Error: {str(e)}")
         return jsonify({'error': 'Internal Server Error'}), 500
