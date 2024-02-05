@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lol</title>
+    <script>
+        async function fetchData() {
+    try {
+        const response = await fetch('http://192.168.205.174:5000/sample');
+        if (response.ok) {
+            const data = await response.json();
+            // Access the first element of the outer array and the first element of the inner array
+            document.getElementById('sampleFormat').textContent = data[0][0];
+        } else {
+            console.error('Failed to fetch data:', response.status, response.statusText);
+        }
+    } catch (error) {
+        console.error('Error during fetch:', error);
+    }
+}
+
+fetchData();
+
+    </script>
+</head>
+<body>
+    <p id="sampleFormat"></p>
+</body>
+</html>

@@ -20,7 +20,7 @@ CORS(app)
 
 db_config = {
     'host': '127.0.0.1',
-    'user': 'bakka',
+    'user': 'sus',
     'password': 'lol',
     'database': 'best_shop',
 }
@@ -286,11 +286,12 @@ def manage_stocks():
 
             for category_name, category_stocks in stocks_by_category.items():
                 result_data = {
-                    'category_name': category_name,
-                    'stocks': category_stocks
+                    category_name: category_stocks      
                 }
                 formatted_stocks.append(result_data)
+
             return jsonify(formatted_stocks)
+
         except mysql.connector.Error as e:
             return jsonify({'error': str(e)}), 500
         finally:
@@ -399,6 +400,7 @@ def generate_excel():
         main_category_place = data['main_category']
         sub_category_place = data['sub_category']
         brand_place = data['brand']
+        colour_place = data['colour']
         cursor.execute('''SELECT
             s.name,
             msq.model_name,
@@ -435,6 +437,7 @@ def generate_excel():
                 'BRAND': parsed_name[brand_place-1],
                 'SIZES': stock['size'],
                 'STYLE MODE': stock['model_name'],
+                'COLOUR': parsed_name[colour_place-1]
             }
             formatted_stocks['stocks'].append(formatted_stock)
 
