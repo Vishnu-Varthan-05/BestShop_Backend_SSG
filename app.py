@@ -20,8 +20,8 @@ CORS(app)
 
 db_config = {
     'host': '127.0.0.1',
-    'user': 'sus',
-    'password': 'lol',
+    'user': 'vishnu',
+    'password': 'vishnu',
     'database': 'best_shop',
 }
 
@@ -341,7 +341,6 @@ def manage_stocks():
             connection.close()
 
         
-
 @app.route('/dashboard-data', methods=['GET'])
 def get_dashboard_data():
     cursor = None 
@@ -350,37 +349,32 @@ def get_dashboard_data():
         cursor = connection.cursor()
         cursor.execute("""
             SELECT
+                DATEDIFF(CURDATE(), stock_details.date_added) AS age,
                 SUM(msq.quantity) AS total_quantity,
                 SUM(stock_details.selling_price * msq.quantity) AS total_price
             FROM
                 model_size_quantity msq
             INNER JOIN stock_details USING(stock_id)
             GROUP BY
-                CASE
-                    WHEN DATEDIFF(CURDATE(), stock_details.date_added) < 30 THEN 'less_than_30_days'
-                    WHEN DATEDIFF(CURDATE(), stock_details.date_added) BETWEEN 30 AND 180 THEN 'between_30_and_180_days'
-                    WHEN DATEDIFF(CURDATE(), stock_details.date_added) > 180 THEN 'more_than_180_days'
-                END;
+                DATEDIFF(CURDATE(), stock_details.date_added);
             """)
         result = cursor.fetchall()
         series = []
-        if len(result) > 0:
+        
+        for row in result:
+            age = row[0]
+            if age < 30:
+                age_category = 'Less than 30 days'
+            elif 30 <= age <= 180:
+                age_category = 'Between 30 to 180 days'
+            else:
+                age_category = 'More than 180 days'
+            
             series.append({
-                'name': 'Less than 30 days',
-                'data': [result[0][0], result[0][1], result[0][1] / result[0][0]]
+                'name': age_category,
+                'data': [row[1], row[2], row[2] / row[1]]
             })
 
-        if len(result) > 1:
-            series.append({
-                'name': 'Between 30 to 180 days',
-                'data': [result[1][0], result[1][1], result[1][1] / result[1][0]]
-            })
-
-        if len(result) > 2:
-            series.append({
-                'name': 'More than 180 days',
-                'data': [result[2][0], result[2][1], result[2][1] / result[2][0]]
-            })
         return jsonify({'series': series})
     except mysql.connector.Error as e:
         return jsonify({'error': str(e)}), 500
