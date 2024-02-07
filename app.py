@@ -237,7 +237,6 @@ def manage_field_details(fieldDetailsID = None):
 def manage_stocks():
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
-
     if request.method == 'GET':
         try:
             cursor.execute('''
@@ -257,10 +256,10 @@ def manage_stocks():
             INNER JOIN
                 mapping_table mt USING(stock_id)
             INNER JOIN
-                category c
+                category c ON mt.category_id = c.category_id
             WHERE 
                 s.date_added = CURDATE()
-        ''')
+            ''')
 
             rows = cursor.fetchall()
 
