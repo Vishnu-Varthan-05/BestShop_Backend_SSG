@@ -69,7 +69,7 @@ def categories(categoryID=None, fieldID=None):
         
         elif request.method == 'POST':
             data = request.form
-            category_name = data['category_name']
+            category_name = data['category_name'].capitalize()
             connection = get_db_connection()
             cursor = connection.cursor()
             cursor.execute('INSERT INTO category (category_name) VALUES (%s)', (category_name,))
@@ -143,7 +143,7 @@ def manage_fields(fieldID = None):
             data = request.json
             print(data)
             category_id = int(data['category_id'])
-            field_name = data['field_name']
+            field_name = data['field_name'].capitalize()
             field_type = data['type']
             has_separate_page = int(data['has_separate_page'])
             connection = get_db_connection()
@@ -188,7 +188,7 @@ def manage_field_details(fieldDetailsID = None):
         elif request.method == 'POST' and fieldDetailsID is None:
             data = request.form
             field_id = data['field_id']
-            details_name = data['details_name']
+            details_name = data['details_name'].capitalize()
             cursor.execute(
                 'INSERT INTO field_details (field_id, details_name) VALUES (%s, %s)',
                 (field_id, details_name)
@@ -247,6 +247,7 @@ def manage_stocks():
                 s.name AS stock_name,
                 msq.model_name,
                 s.selling_price,
+                msq.colour,
                 msq.size,
                 msq.quantity
             FROM 
@@ -273,6 +274,7 @@ def manage_stocks():
                     'time_added': str(row['time_added']),
                     'stock_name': row['stock_name'],
                     'model_name': row['model_name'],
+                    'colour': row['colour'],
                     'quantity': row['quantity'],
                     'selling_price': row['selling_price'],
                     'size': row['size'],
@@ -306,6 +308,7 @@ def manage_stocks():
             model = data['model']
             mrp = data['mrp']
             name = data['name']
+            colour = data['colour']
             purchasing_price = data['purchasing_price']
             quantity = data['quantities']
             selling_price = data['selling_price']
@@ -326,8 +329,8 @@ def manage_stocks():
 
             for i in range(len(size)):
                 cursor.execute(
-                    'INSERT INTO model_size_quantity (stock_id, model_name, size, quantity) VALUES (%s, %s, %s, %s)',
-                    (stock_id, model, size[i], quantity[i])
+                    'INSERT INTO model_size_quantity (stock_id, model_name, colour, size, quantity) VALUES (%s, %s, %s, %s, %s)',
+                    (stock_id, model, colour, size[i], quantity[i])
                 )
                 connection.commit()
 
@@ -371,7 +374,7 @@ def get_dashboard_data():
             
             series.append({
                 'name': age_category,
-                'data': [row[1], row[2], row[2] / row[1]]
+                'data': [row[1], row[2], row[2] // row[1]]
             })
 
         return jsonify({'series': series})
@@ -389,16 +392,16 @@ def generate_excel():
     try:
         data = request.json
         dist_id = data['dist_id']
-        item_name_place = data['item_name']
-        main_category_place = data['main_category']
-        sub_category_place = data['sub_category']
-        brand_place = data['brand']
-        colour_place = data['colour']
+        # item_name_place = data['item_name']
+        # main_category_place = data['main_category']
+        # sub_category_place = data['sub_category']
+        # brand_place = data['brand']
         cursor.execute('''SELECT
             s.name,
             msq.model_name,
             msq.size,
             msq.quantity,
+            msq.colour,
             s.purchasing_price,
             s.selling_price,
             s.mrp
@@ -420,17 +423,17 @@ def generate_excel():
         for stock in stocks:
             parsed_name = stock['name'].split('-')
             formatted_stock = {
-                'ItemName': parsed_name[item_name_place-1],
+                'ItemName': parsed_name[1],
                 'QTY': stock['quantity'],
                 'PurchasePrice': stock['purchasing_price'],
                 'SellingPrice': stock['selling_price'],
                 'MRP': stock['mrp'],
-                'MAIN CATEGORY': parsed_name[main_category_place-1],
-                'SUB CATEGORY': parsed_name[sub_category_place-1],
-                'BRAND': parsed_name[brand_place-1],
+                'MAIN CATEGORY': parsed_name[0],
+                'SUB CATEGORY': parsed_name[2],
+                'BRAND': parsed_name[3],
                 'SIZES': stock['size'],
                 'STYLE MODE': stock['model_name'],
-                'COLOUR': parsed_name[colour_place-1]
+                'COLOUR': stock['colour']
             }
             formatted_stocks['stocks'].append(formatted_stock)
 
