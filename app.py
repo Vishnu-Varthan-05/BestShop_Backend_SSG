@@ -69,7 +69,8 @@ def categories(categoryID=None, fieldID=None):
         
         elif request.method == 'POST':
             data = request.form
-            category_name = data['category_name'].capitalize()
+            category_name = data['category_name']
+            category_name = category_name.upper()
             connection = get_db_connection()
             cursor = connection.cursor()
             cursor.execute('INSERT INTO category (category_name) VALUES (%s)', (category_name,))
@@ -141,9 +142,8 @@ def manage_fields(fieldID = None):
         connection = None
         try:
             data = request.json
-            print(data)
             category_id = int(data['category_id'])
-            field_name = data['field_name'].capitalize()
+            field_name = data['field_name'].upper()
             field_type = data['type']
             has_separate_page = int(data['has_separate_page'])
             connection = get_db_connection()
@@ -188,7 +188,7 @@ def manage_field_details(fieldDetailsID = None):
         elif request.method == 'POST' and fieldDetailsID is None:
             data = request.form
             field_id = data['field_id']
-            details_name = data['details_name'].capitalize()
+            details_name = data['details_name'].upper()
             cursor.execute(
                 'INSERT INTO field_details (field_id, details_name) VALUES (%s, %s)',
                 (field_id, details_name)
@@ -305,7 +305,7 @@ def manage_stocks():
             category_id = data['category_id']
             dist_id = data['dist_id']
             field_details_ids = data['field_details_id']
-            model = data['model']
+            model = data['model'].upper()
             mrp = data['mrp']
             name = data['name']
             colour = data['colour']
