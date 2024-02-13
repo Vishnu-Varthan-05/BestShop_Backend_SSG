@@ -343,6 +343,47 @@ def manage_stocks():
             connection.close()
 
         
+# @app.route('/dashboard-data', methods=['GET'])
+# def get_dashboard_data():
+#     cursor = None 
+#     try:
+#         connection = get_db_connection()
+#         cursor = connection.cursor()
+#         cursor.execute("""
+#             SELECT
+#                 DATEDIFF(CURDATE(), stock_details.date_added) AS age,
+#                 SUM(msq.quantity) AS total_quantity,
+#                 SUM(stock_details.selling_price * msq.quantity) AS total_price
+#             FROM
+#                 model_size_quantity msq
+#             INNER JOIN stock_details USING(stock_id)
+#             GROUP BY
+#                 DATEDIFF(CURDATE(), stock_details.date_added);
+#             """)
+#         result = cursor.fetchall()
+#         series = []
+        
+#         for row in result:
+#             age = row[0]
+#             if age < 30:
+#                 age_category = 'Less than 30 days'
+#             elif 30 <= age <= 180:
+#                 age_category = 'Between 30 to 180 days'
+#             else:
+#                 age_category = 'More than 180 days'
+            
+#             series.append({
+#                 'name': age_category,
+#                 'data': [row[1], row[2], row[2] // row[1]]
+#             })
+
+#         return jsonify({'series': series})
+#     except mysql.connector.Error as e:
+#         return jsonify({'error': str(e)}), 500
+#     finally:
+#         if cursor is not None:
+#             cursor.close()
+
 @app.route('/dashboard-data', methods=['GET'])
 def get_dashboard_data():
     cursor = None 
@@ -361,8 +402,11 @@ def get_dashboard_data():
                 DATEDIFF(CURDATE(), stock_details.date_added);
             """)
         result = cursor.fetchall()
-        series = []
         
+        # Initialize a defaultdict to store data for each age category
+        series_dict = defaultdict(lambda: [0, 0, 0])
+
+        # Populate the defaultdict with data from the database query result
         for row in result:
             age = row[0]
             if age < 30:
@@ -372,18 +416,22 @@ def get_dashboard_data():
             else:
                 age_category = 'More than 180 days'
             
-            series.append({
-                'name': age_category,
-                'data': [row[1], row[2], row[2] // row[1]]
-            })
+            # Add the data to the defaultdict
+            series_dict[age_category][0] += row[1]  # total_quantity
+            series_dict[age_category][1] += row[2]  # total_price
+            series_dict[age_category][2] = series_dict[age_category][1] // series_dict[age_category][0] if series_dict[age_category][0] > 0 else 0
 
+        # Convert the defaultdict to a list of dictionaries
+        series = [{'name': category, 'data': data} for category, data in series_dict.items()]
+
+        # Return the JSON response
         return jsonify({'series': series})
     except mysql.connector.Error as e:
         return jsonify({'error': str(e)}), 500
     finally:
         if cursor is not None:
             cursor.close()
-
+            
 @app.route('/generate-excel', methods=['POST'])
 def generate_excel():
     connection = get_db_connection()
